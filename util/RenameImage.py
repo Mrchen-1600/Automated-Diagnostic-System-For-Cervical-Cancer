@@ -8,7 +8,6 @@
 """
 
 import os
-from PIL import Image
 
 # 细胞类别
 classes = ["im_Dyskeratotic", "im_Koilocytotic", "im_Metaplastic",
@@ -30,25 +29,18 @@ for class_name in classes:
             print(f"Error: File not found - {img_path}")
             continue
 
-        # 使用 with 确保文件正确关闭
-        with Image.open(img_path) as img:
-            dir_path, img_name = os.path.split(img_path)
+        dir_path, img_name = os.path.split(img_path)
+        # 新文件名格式：类别_原文件名
+        new_name = f"{class_name}_{img_name}"
+        new_path = os.path.join(dir_path, new_name)
 
-            # 新文件名格式：类别_原文件名
-            new_name = f"{class_name}_{img_name}"
-            new_path = os.path.join(dir_path, new_name)
+        if os.path.exists(new_path):
+            print(f"Warning: File already exists, skipping - {new_path}")
+            continue
 
-            if os.path.exists(new_path):
-                print(f"Warning: File already exists, skipping - {new_path}")
-                continue
-
-            try:
-                # 保存重命名后的文件
-                img.save(new_path)
-                print(f"Renamed: {img_name} -> {new_name}")
-                # 删除原文件（仅在保存成功后执行）
-                os.remove(img_path)
-                print(f"Deleted original file: {img_name}")
-
-            except Exception as e:
-                print(f"Error processing {img_path}: {str(e)}")
+        try:
+            # 直接重命名文件
+            os.rename(img_path, new_path)
+            print(f"Renamed: {img_name} -> {new_name}")
+        except Exception as e:
+            print(f"Error processing {img_path}: {str(e)}")
