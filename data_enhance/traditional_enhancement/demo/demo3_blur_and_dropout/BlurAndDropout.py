@@ -10,74 +10,103 @@ import cv2
 import imgaug.augmenters as iaa
 import matplotlib.pyplot as plt
 
+def apply_filter(image, filter_func, *args, **kwargs):
+    """
+    应用指定的滤波函数处理图像
+
+    :param image: 输入图像
+    :param filter_func: 滤波函数
+    :param args: 滤波函数的位置参数
+    :param kwargs: 滤波函数的关键字参数
+    :return: 处理后的图像
+    """
+    return filter_func(image, *args, **kwargs)
+
+
+def save_image(image, save_path):
+    """
+    保存图像到指定路径
+
+    :param image: 要保存的图像
+    :param save_path: 保存路径
+    """
+    cv2.imwrite(save_path, image)
+
+
+def show_images(images, titles):
+    """
+    显示多个图像
+
+    :param images: 图像列表
+    :param titles: 图像标题列表
+    """
+    rows = 2
+    cols = 3
+    for i in range(len(images)):
+        plt.subplot(rows, cols, i + 1)
+        plt.imshow(images[i][:, :, ::-1])
+        plt.title(titles[i])
+        plt.axis('off')
+    plt.show()
+
 
 file_name = "../test.bmp"
-
 folder_name = "result_imgs"
+
+# 创建保存结果的文件夹
 os.makedirs(folder_name, exist_ok=True)
-save_root = folder_name + "/"
-save_name = os.path.join(save_root, "generate_")
+save_root = os.path.join(folder_name)
+save_name_base = os.path.join(save_root, "generate_")
 
+# 读取图像
 img_original = cv2.imread(file_name)
+if img_original is None:
+    print(f"无法读取图像文件: {file_name}")
+else:
+    filters = [
+        (cv2.blur, (5, 5), "blur"),
+        (cv2.medianBlur, 9, "medianBlur"),
+        (cv2.GaussianBlur, (15, 15), 0, "GaussianBlur")
+    ]
 
-# 滤波处理（滤波处理主要是让图像变得模糊，提取图像的重要信息）
-img1 = cv2.blur(img_original, (5, 5))  # 均值滤波
-img_name1 = save_name + "blur.bmp"
-save_path1 = os.path.join(os.getcwd(), img_name1)
-cv2.imwrite(save_path1, img1)
+    augmented_images = []
+    image_titles = ["Original"]
+    processed_images = [img_original]
 
-img2 = cv2.medianBlur(img_original, 9)  # 中值滤波
-img_name2 = save_name + "medianBlur.bmp"
-save_path2 = os.path.join(os.getcwd(), img_name2)
-cv2.imwrite(save_path2, img2)
+    # 应用滤波处理
+    for filter_info in filters:
+        filter_func = filter_info[0]
+        args = filter_info[1:-1]
+        filter_name = filter_info[-1]
+        img_filtered = apply_filter(img_original, filter_func, *args)
+        img_name = f"{save_name_base}{filter_name}.bmp"
+        save_path = os.path.join(os.getcwd(), img_name)
+        save_image(img_filtered, save_path)
+        processed_images.append(img_filtered)
+        image_titles.append(filter_name)
 
-img3 = cv2.GaussianBlur(img_original, (15, 15), 0)  # 高斯滤波
-img_name3 = save_name + "GaussianBlur.bmp"
-save_path3 = os.path.join(os.getcwd(), img_name3)
-cv2.imwrite(save_path3, img3)
+    # 定义图像增强序列
+    seq4 = iaa.Sequential([
+        iaa.CoarseDropout((0.05, 0.10), size_percent=(0.05, 0.1), per_channel=0.5)
+    ])
 
+    seq5 = iaa.Sequential([
+        iaa.CoarseDropout((0.05, 0.10), size_percent=(0.05, 0.1))
+    ])
 
-seq4 = iaa.Sequential([ #建立一个名为seq的实例，定义增强方法，用于增强
-    # 将1%到5%的像素设置为黑色, 对50%的图像每个颜色通道单独进行此操作（每个通道都随机将1%到5%的像素设置为黑色）
-    iaa.CoarseDropout((0.05, 0.10), size_percent=(0.05, 0.1), per_channel=0.5)])
+    # 应用图像增强
+    augmentations = [
+        (seq4, "dropout"),
+        (seq5, "coarse_dropout")
+    ]
 
-seq5 = iaa.Sequential([
-    # 将3%到10%的像素用原图大小2%到5%的黑色方块覆盖，per_channel=0.2对20%的图像每个颜色通道单独进行此操作
-    iaa.CoarseDropout(
-        (0.05, 0.10), size_percent=(0.05, 0.1))])
+    for seq, aug_name in augmentations:
+        img_augmented = seq.augment_image(img_original)
+        img_name = f"{save_name_base}{aug_name}.bmp"
+        save_path = os.path.join(os.getcwd(), img_name)
+        save_image(img_augmented, save_path)
+        processed_images.append(img_augmented)
+        image_titles.append(aug_name)
 
-
-# # 将1%到5%的像素设置为黑色
-img_dropout = seq4.augment_image(img_original)
-img_name4 = save_name + "dropout.bmp"
-save_path4 = os.path.join(os.getcwd(), img_name4)
-cv2.imwrite(save_path4, img_dropout)
-
-
-# 将3%到10%的像素用原图大小2%到5%的黑色方块覆盖
-img_coarsedropout = seq5.augment_image(img_original)
-img_name5 = save_name + "coarse_dropout.bmp"
-save_path5 = os.path.join(os.getcwd(), img_name5)
-cv2.imwrite(save_path5, img_coarsedropout)
-
-# 因为cv2.imread()函数返回的图像颜色空间是BGR，而不是RGB
-# 所以显示图片的时候可以通过[:,:,::-1]让图像颜色空间倒序排列，即BGR->RGB
-plt.subplot(231)
-plt.imshow(img_original[:,:,::-1])
-
-plt.subplot(232)
-plt.imshow(img1[:,:,::-1])
-
-plt.subplot(233)
-plt.imshow(img2[:,:,::-1])
-
-plt.subplot(234)
-plt.imshow(img3[:,:,::-1])
-
-plt.subplot(235)
-plt.imshow(img_dropout[:,:,::-1])
-
-plt.subplot(236)
-plt.imshow(img_coarsedropout[:,:,::-1])
-
-plt.show()
+    # 显示处理后的图像
+    show_images(processed_images, image_titles)
