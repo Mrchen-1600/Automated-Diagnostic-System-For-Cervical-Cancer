@@ -6,7 +6,6 @@
 
 import torch
 import matplotlib.pyplot as plt
-from torchvision import transforms
 from torchvision import datasets
 from torch.utils.data import DataLoader
 
@@ -18,26 +17,9 @@ import time
 from tqdm import tqdm
 
 
-
-# 数据预处理
-def get_transforms():
-    return {
-        "train": transforms.Compose([
-            transforms.RandomResizedCrop(224),
-            transforms.RandomHorizontalFlip(p=0.5),
-            transforms.ToTensor(),
-            transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))
-        ]),
-        "val": transforms.Compose([
-            transforms.Resize((224, 224)),
-            transforms.ToTensor(),
-            transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))
-        ])
-    }
-
 # 加载数据集
 def load_datasets(image_path):
-    transform = get_transforms()
+    transform = opt.TRANSFORM
     train_dataset = datasets.ImageFolder(root=os.path.join(image_path, "train"), transform=transform["train"])
     val_dataset = datasets.ImageFolder(root=os.path.join(image_path, "val"), transform=transform["val"])
     return train_dataset, val_dataset
