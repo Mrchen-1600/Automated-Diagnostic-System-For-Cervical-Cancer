@@ -10,7 +10,7 @@ import torch.optim as optim
 from torchvision import transforms, datasets, utils
 from torch.utils.data import DataLoader
 from data_enhance.DCGAN.config.Config import opt
-from data_enhance.DCGAN.model.model import Generator, Discriminator
+from data_enhance.DCGAN.model.Model import Generator, Discriminator
 import os
 
 def train():
