@@ -26,7 +26,7 @@
 
 # 功能演示视频
 
-![视频演示](./assets/video/video.gif)
+![视频演示](./assets/video/demo.gif)
 
 # 数据集介绍
 
