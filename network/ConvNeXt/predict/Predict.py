@@ -6,8 +6,8 @@
 import os
 import torch
 from PIL import Image
-from network.VGGNet.model.Model import vgg
-from network.VGGNet.config.Config import  opt
+from network.ConvNeXt.model.Model import convnext_tiny
+from network.ConvNeXt.config.Config import  opt
 
 
 def get_image_paths(test_image_path):
@@ -17,9 +17,9 @@ def get_image_paths(test_image_path):
     return [os.path.join(test_image_path, i) for i in os.listdir(test_image_path) if i.endswith(".bmp")]
 
 
-def load_model(model_name, device, num_classes, model_path):
+def load_model(device, num_classes, model_path):
     """加载模型及权重"""
-    model = vgg(model_name=model_name, num_classes=num_classes, batch_norm=True, init_weights=False).to(device)
+    model = convnext_tiny(num_classes=num_classes).to(device)
     model.load_state_dict(torch.load(model_path, map_location=device))
     model.eval()
     return model
@@ -40,7 +40,7 @@ def main():
     transform = opt.TRANSFORM["test"]
     test_image_path = opt.TEST_IMAGE_PATH
     img_path_list = get_image_paths(test_image_path)
-    model = load_model(opt.MODEL_NAME, device, opt.NUM_CLASSES, opt.BEST_MODEL_PATH)
+    model = load_model(device, opt.NUM_CLASSES, opt.BEST_MODEL_PATH)
 
     classes = opt.CLASSES
 

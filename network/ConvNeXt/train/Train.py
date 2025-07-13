@@ -1,19 +1,20 @@
 # -*- coding= utf-8 -*-
 # @Author : 尘小风
-# @File : Train.py
+# @File : VGGnet_train.py
 # @software : PyCharm
 
 import os
 import json
 import sys
+import math
 import torch
-import torch.optim.lr_scheduler as lr_scheduler
 from torchvision import datasets
 from torch.utils.data import DataLoader
+import torch.optim.lr_scheduler as lr_scheduler
 from tqdm import tqdm
 from torch.utils.tensorboard import SummaryWriter
-from network.VGGNet.model.Model import vgg
-from network.VGGNet.config.Config import opt
+from network.ConvNeXt.model.Model import convnext_tiny
+from network.ConvNeXt.config.Config import opt
 # 使用混合精度训练，结合单精度（FP32）和半精度（FP16）浮点数，能减少显存占用，加快训练速度
 from torch.cuda.amp import GradScaler, autocast
 
@@ -72,54 +73,120 @@ class ModelManager:
     ModelManager类负责模型的初始化、优化器的选择和学习率调度器的初始化
     """
 
-    def __init__(self):
-        self.device = torch.device(opt.DEVICE)
-        self.model = self._initialize_model()
-        self.optimizer = self._initialize_optimizer()
-        self.scheduler = self._initialize_scheduler(self.optimizer)
+    def __init__(self, num_step: int, epochs: int):
+        self.device = torch.device(opt.DEVICE if torch.cuda.is_available() else "cpu")
+        self.model = self._initialize_model(self.device)
+        self.params_group = self.get_params_groups(self.model)
+        self.optimizer = self._initialize_optimizer(self.params_group)
+        self.scheduler = self._initialize_scheduler(self.optimizer, num_step, epochs)
         self.loss_function = torch.nn.CrossEntropyLoss()
 
     # 迁移学习
-    def _initialize_model(self):
-        model = vgg(model_name=opt.MODEL_NAME, batch_norm=True).to(self.device)
-        # 当strict=True,要求预训练权重层数的键值与新构建的模型中的权重层数名称完全吻合
-        # 如果strict=False 预训练权重与新构建网络的键值匹配就加载，没有的就默认初始化。
-        missing_keys, unexpected_keys = model.load_state_dict(
-            torch.load(opt.MODEL_WEIGHT_PATH, map_location='cpu'),
-            strict=False
-        )
-        # 修改分类头
-        inchannel = model.classifier[6].in_features
-        model.classifier[6] = torch.nn.Linear(inchannel, opt.NUM_CLASSES).to(self.device)
+    def _initialize_model(self, device):
+        model = convnext_tiny(num_classes=opt.NUM_CLASSES).to(device)
+
+        if opt.MODEL_WEIGHT_PATH != "":
+            weights_dict = torch.load(opt.MODEL_WEIGHT_PATH, map_location=opt.DEVICE)["model"]
+            # 删除有关分类类别的权重
+            for k in list(weights_dict.keys()):
+                if "head" in k:
+                    del weights_dict[k]
+            print(model.load_state_dict(weights_dict, strict=False))
+
+        if opt.FREEZE_LAYERS:
+            for name, para in model.named_parameters():
+                # 除head外，其他权重全部冻结
+                if "head" not in name:
+                    para.requires_grad_(False)
+                else:
+                    print("training {}".format(name))
         return model
 
+
+    # 将模型的可训练参数划分为应用权重衰减和不应用权重衰减的两组，帮助优化器对不同类型的参数采用不同的训练策略
+    def get_params_groups(self, model):
+        # 记录optimize要训练的权重参数
+        parameter_group_vars = {"decay": {"params": [], "weight_decay": opt.WEIGHT_DECAY},
+                                "no_decay": {"params": [], "weight_decay": 0.}}
+
+        # 记录对应的权重名称
+        parameter_group_names = {"decay": {"params": [], "weight_decay": opt.WEIGHT_DECAY},
+                                 "no_decay": {"params": [], "weight_decay": 0.}}
+
+        for name, param in model.named_parameters():
+            # 如果参数不需要梯度更新（即被冻结），则跳过该参数
+            if not param.requires_grad:
+                continue
+
+                # 如果参数的维度为 1 或者参数名称以 .bias 结尾，将其划分到 no_decay 组，否则划分到 decay 组
+            if len(param.shape) == 1 or name.endswith(".bias"):
+                group_name = "no_decay"
+            else:
+                group_name = "decay"
+
+            parameter_group_vars[group_name]["params"].append(param)
+            parameter_group_names[group_name]["params"].append(name)
+
+        print("Param groups = %s" % json.dumps(parameter_group_names, indent=2))
+        return list(parameter_group_vars.values())
+
+
     # 根据配置文件的配置，初始化相应的优化器
-    def _initialize_optimizer(self):
-        params = [p for p in self.model.parameters() if p.requires_grad]
+    def _initialize_optimizer(self, params_group):
+        # params = [p for p in self.model.parameters() if p.requires_grad]
+
         if opt.OPTIMIZER_TYPE == "SGD":
             optimizer = torch.optim.SGD(
-                params,
+                params_group,
                 lr=opt.LEARNING_RATE,
                 momentum=opt.MOMENTUM,
                 weight_decay=opt.WEIGHT_DECAY
             )
         elif opt.OPTIMIZER_TYPE == "Adam":
             optimizer = torch.optim.Adam(
-                params,
-                lr=opt.LEARNING_RATE
+                params_group,
+                lr=opt.LEARNING_RATE,
+                weight_decay = opt.WEIGHT_DECAY
+            )
+        elif opt.OPTIMIZER_TYPE == "AdamW":
+            optimizer = torch.optim.AdamW(
+                params_group,
+                lr=opt.LEARNING_RATE,
+                weight_decay=opt.WEIGHT_DECAY
             )
         else:
             raise ValueError("Unsupported optimizer type. Choose 'SGD' or 'Adam'.")
         return optimizer
 
-    # 学习率调度器
-    def _initialize_scheduler(self, optimizer):
-        if opt.USE_SCHEDULER:
-            scheduler = lr_scheduler.ExponentialLR(optimizer, gamma=opt.GAMMA)
-        else:
-            scheduler = None
-        return scheduler
+    # 余弦退火学习率调度器，用于动态调整学习率。
+    # 该调度器根据当前训练步骤数和总训练步骤数，计算出一个学习率倍率因子，然后根据该因子调整学习率。
+    def _initialize_scheduler(self, optimizer,
+                            num_step: int,
+                            epochs: int,
+                            warmup=opt.WARMUP,
+                            warmup_epochs=opt.WARMUP_EPOCHS,
+                            warmup_factor=opt.WARMUP_FACTOR,
+                            end_factor=opt.END_FACTOR):
+        assert num_step > 0 and epochs > 0
+        if warmup is False:
+            warmup_epochs = 0
 
+        def f(x):
+            """
+            根据step数返回一个学习率倍率因子，
+            注意在训练开始之前，pytorch会提前调用一次lr_scheduler.step()方法
+            """
+            if warmup is True and x <= (warmup_epochs * num_step):
+                alpha = float(x) / (warmup_epochs * num_step)
+                # warmup过程中lr倍率因子从warmup_factor -> 1
+                return warmup_factor * (1 - alpha) + alpha
+            else:
+                current_step = (x - warmup_epochs * num_step)
+                cosine_steps = (epochs - warmup_epochs) * num_step
+                # warmup后lr倍率因子从1 -> end_factor
+                return ((1 + math.cos(current_step * math.pi / cosine_steps)) / 2) * (1 - end_factor) + end_factor
+
+        return lr_scheduler.LambdaLR(optimizer, lr_lambda=f)
 
 
 class Trainer:
@@ -222,8 +289,6 @@ class Trainer:
             self.tb_writer.add_scalars('Accuracy', {'Train': train_acc, 'Validation': val_acc}, epoch)
             self.tb_writer.add_scalar('Learning Rate',self.model_manager.optimizer.param_groups[0]["lr"], epoch)
 
-            torch.save(self.model_manager.model.state_dict(),
-                       os.path.join(opt.WEIGHTS_DIR, f"vgg16-{epoch}.pth"))
 
             # 保存最佳模型
             if val_acc > best_val_acc:
@@ -257,7 +322,7 @@ def main():
     print(f"Number of classes: {len(train_dataset.classes)}")
 
 
-    model_manager = ModelManager()
+    model_manager = ModelManager(len(train_loader), opt.EPOCHS)
     trainer = Trainer(model_manager, train_loader, val_loader)
     trainer.run_training()
 
