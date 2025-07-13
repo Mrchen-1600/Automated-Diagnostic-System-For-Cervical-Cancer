@@ -13,8 +13,8 @@ from torchvision import datasets
 from torch.utils.data import DataLoader
 from tqdm import tqdm
 from torch.utils.tensorboard import SummaryWriter
-from VisionTransformer.model.Model import vit_base_patch16_224_in21k
-from VisionTransformer.config.Config import opt
+from network.VisionTransformer.model.Model import vit_base_patch16_224_in21k
+from network.VisionTransformer.config.Config import opt
 # 使用混合精度训练，结合单精度（FP32）和半精度（FP16）浮点数，能减少显存占用，加快训练速度
 from torch.cuda.amp import GradScaler, autocast
 

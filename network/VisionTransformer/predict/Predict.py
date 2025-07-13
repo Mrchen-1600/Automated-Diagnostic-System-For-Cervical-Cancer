@@ -6,8 +6,8 @@
 import os
 import torch
 from PIL import Image
-from VisionTransformer.model.Model import vit_base_patch16_224_in21k
-from VisionTransformer.config.Config import  opt
+from network.VisionTransformer.model.Model import vit_base_patch16_224_in21k
+from network.VisionTransformer.config.Config import  opt
 
 
 def get_image_paths(test_image_path):
