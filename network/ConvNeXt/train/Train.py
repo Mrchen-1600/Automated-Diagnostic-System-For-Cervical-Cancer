@@ -91,7 +91,7 @@ class ModelManager:
             for k in list(weights_dict.keys()):
                 if "head" in k:
                     del weights_dict[k]
-            print(model.load_state_dict(weights_dict, strict=False))
+            model.load_state_dict(weights_dict, strict=False)
 
         if opt.FREEZE_LAYERS:
             for name, para in model.named_parameters():

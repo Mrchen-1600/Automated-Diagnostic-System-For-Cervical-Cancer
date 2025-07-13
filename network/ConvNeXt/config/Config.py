@@ -22,8 +22,8 @@ class Config:
     CLASSES = ["im_Dyskeratotic", "im_Koilocytotic", "im_Metaplastic", "im_Parabasal", "im_Superficial_Intermediate"]
 
     # 训练参数
-    BATCH_SIZE = 16
-    EPOCHS = 3
+    BATCH_SIZE = 64
+    EPOCHS = 20
     NUM_CLASSES = 5
     # 是否冻结head以外所有权重
     # 当使用预训练权重时，可以把这个值设置成true，表示只对分类层做微调

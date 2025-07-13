@@ -21,8 +21,8 @@ class Config:
     CLASSES = ["im_Dyskeratotic", "im_Koilocytotic", "im_Metaplastic", "im_Parabasal", "im_Superficial_Intermediate"]
 
     # 训练参数
-    BATCH_SIZE = 16
-    EPOCHS = 3
+    BATCH_SIZE = 64
+    EPOCHS = 20
     NUM_CLASSES = 5
 
     # 优化器相关
