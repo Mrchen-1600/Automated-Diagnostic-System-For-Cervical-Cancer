@@ -49,3 +49,18 @@
 a) 浅表中层细胞  b) 副基底层细胞   c) 挖空细胞  d) 角化不良细胞  e) 化生细胞
 
 图1 SIPaKMeD数据集各类别细胞图像
+
+# 项目介绍
+本项目是一个基于深度学习的宫颈细胞分类识别系统，使用了ResNet50、VGG16、VisionTransformer三种模型进行训练，通过pyqt5搭建了可视化界面，用户可以通过界面上传图像进行分类识别。
+
+每个目录下都有相应的readme.txt文件，介绍了该目录下的文件以及使用，请先阅读readme.txt文件。
+
+# 环境要求
+以下是本项目使用的环境，建议保持一致：
+- windows ≥ 10
+- Python 3.9.13
+- torch 2.0.0 + cuda 11.8
+- torchvision 0.15.1 + cuda 11.8
+- tensorboard 2.13.0
+- imagaug 0.4.0
+- PyQt5 5.15.9
